@@ -32,12 +32,15 @@ down_sample_ratio = 16
 epochs = 10
 HiC_max_value = 100
 
-
-
+dir_path = os.path.dirname(os.path.realpath(__file__))
+root_path = dir_path + "/.."
+data_path = root_path + "/data"
 # This block is the actual training data used in the training. The training data is too large to put on Github, so only toy data is used.
-input_file = '/home/zhangyan/Desktop/chr21.10kb.matrix'
+input_file = data_path + '/10kb_resolution_intrachromosomal/chr19/MAPQG0/chr19_10kb.RAWobserved'
+output_file = data_path + '/10kb_resolution_intrachromosomal/chr19/MAPQG0/chr19_10kb_divided.npy'
 low_resolution_samples, index = utils.divide(input_file)
-
+np.save(output_file, low_resolution_samples)
+"""
 low_resolution_samples = np.minimum(HiC_max_value, low_resolution_samples)
 
 batch_size = low_resolution_samples.shape[0]
@@ -119,3 +122,4 @@ y = int(index[i][3])
 prediction_1[x+6:x+34, y+6:y+34] = y_predict[i]
 
 np.save(input_file + 'enhanced.npy', prediction_1)
+"""
