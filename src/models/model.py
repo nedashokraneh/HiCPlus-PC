@@ -7,12 +7,15 @@ from torch.utils import data
 import gzip
 import sys
 import torch.optim as optim
+
 conv2d1_filters_numbers = 8
 conv2d1_filters_size = 9
 conv2d2_filters_numbers = 8
 conv2d2_filters_size = 1
 conv2d3_filters_numbers = 1
 conv2d3_filters_size = 5
+padding = conv2d1_filters_size + conv2d2_filters_size + conv2d3_filters_size - 3
+half_padding = padding / 2
 
 class Net(nn.Module):
     def __init__(self, D_in, D_out):
@@ -24,7 +27,7 @@ class Net(nn.Module):
         self.conv3 = nn.Conv2d(conv2d2_filters_numbers, 1, conv2d3_filters_size)
 
     def forward(self, x):
-        print("start forwardingf")
+        #print("start forwardingf")
         x = self.conv1(x)
         x = F.relu(x)
         x = self.conv2(x)
@@ -88,7 +91,7 @@ for epoch in range(2):  # loop over the dataset multiple times
         #print loss.data
         #print type(data), len(data)
         #print "the key is ", type(data[0])
-        
+
 
 
 print('Finished Training')
@@ -112,4 +115,3 @@ print('conv1.bias.grad after backward')
 print(net.conv1.weight.grad)
 
 '''
-
