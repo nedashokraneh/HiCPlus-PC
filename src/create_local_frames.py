@@ -1,72 +1,61 @@
-### this script get cell type, resolution and list including chromosomes we want their data to include
-
-import sys
 import os
+import sys
 import numpy as np
+import pandas as pd
+import argparse
+import cooler
+import re
+utils_path = "utils"
+sys.path.insert(0, utils_path)
 import utils
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-root_path = dir_path + "/.."
-data_path = root_path + "/data/"
-is_down_sampled = 1
-cell_type = "GM12878_primary"
-training_chromosome_list = [i for i in range(1,18)]
-test_chromosome_list = [i for i in range(18,23)]
-resolution_size = 10000
-down_sample_ratio = 16
+ap = argparse.ArgumentParser()
+ap.add_argument("--input_type", help = "0 if it is cool and 1 if it is COO folder path", type = int)
+ap.add_argument("--cool_file_path", help = "path of cool file to make frames from")
+ap.add_argument("--resolution", help = "resolution of HiC matrix to be used", type = int)
+ap.add_argument("--min_chrN", help = "minimum number of chromosome from cool file to be included in frames", type = int)
+ap.add_argument("--max_chrN", help = "maximum number of chromosome from cool file to be included in frames", type = int)
+ap.add_argument("--COO_folder_path", help = "path of folder containing COO files to make frames from")
+ap.add_argument("--genome_type", help = "hg19 or hg38")
+ap.add_argument("--output_folder_path", help = "path of folder to save down sample data", required = True)
+ap.add_argument("--output_file_name", help = "name of npy file to be saved", required = True)
+args = vars(ap.parse_args())
 
-resolution_dict = {
-    5000: "5kb",
-    10000: "10kb",
-    25000: "25kb",
-    50000: "50kb",
-    100000: "100kb",
-    250000: "250kb",
-    500000: "500kb",
-    1000000: "1mb"
-}
-
-def create_chr_frames(cell_type, chromosome_num): # for example GM12878_primary or GM12878_replicate could be cell_type there should be folder with this name in data folder
-    if is_down_sampled == 1:
-        input_file_name = "chr" + str(chromosome_num) + "_" + resolution_dict[resolution_size] + "_down.RAWobserved"
-        input_file_path = data_path + cell_type + "/" + resolution_dict[resolution_size] + "_resolution_intrachromosomal_down" + str(down_sample_ratio) + "(rep2)/" + input_file_name
-    else:
-        input_file_name = "chr" + str(chromosome_num) + "_" + resolution_dict[resolution_size] + ".RAWobserved"
-        input_file_path = data_path + cell_type + "/" + resolution_dict[resolution_size] + "_resolution_intrachromosomal/chr" + str(chromosome_num) + "/MAPQG0/" + input_file_name
-    frames, index = utils.divide(input_file_path, chromosome_num, resolution_size)
-    return (frames,index)
-
-def create_frames(cell_type, chromosome_list):
-    if is_down_sampled == 1:
-        output_file_name = "chr" + str(min(chromosome_list)) + "-" + str(max(chromosome_list)) + "(down" + str(down_sample_ratio) + ")(rep2)"
-    else:
-        output_file_name = "chr" + str(min(chromosome_list)) + "-" + str(max(chromosome_list))
-    output_file_path = data_path + "divided-data/" + cell_type + "/" + resolution_dict[resolution_size] + "_resolution/"
-    if os.path.exists(output_file_path + output_file_name + ".npy"):
-        print("data already exists in ", output_file_path + output_file_name)
-    else :
-        frames_data = []
-        index_data = []
-        for chromosome_num in chromosome_list:
-            temp_frames, temp_index = create_chr_frames(cell_type, chromosome_num)
-            frames_data.extend(temp_frames)
-            index_data.extend(temp_index)
-            print("chr", chromosome_num, " is done!")
-        frames_data = np.stack(frames_data, axis = 0)
-        index_data = np.stack(index_data, axis = 0)
-        ### testing: cell type = "GM12878_primary", chromosome_list = [19,20,21,22], resolution_size = 10000 so following lines should result in 786
-        ### and ['test' '21' '925' '925'] respectively.
-        #print(frames_data[8719,16,16])
-        #print(index_data[8719,:])
-        if not os.path.exists(output_file_path):
-            os.makedirs(output_file_path)
-        np.save(output_file_path + output_file_name + ".npy", frames_data)
-        np.save(output_file_path + output_file_name + "-index.npy", index_data)
+if os.path.exists(os.path.join(args['output_folder_path'], args['output_file_name'] + ".npy")):
+    print("data already exists")
 
 
-def main():
-    # create_frames(cell_type, training_chromosome_list)
-    create_frames(cell_type, test_chromosome_list)
+if args['input_type'] == 0:
+    cl = cooler.Cooler(args['cool_file_path'] + '::/resolutions/' + str(args['resolution']))
+    frames_data = []
+    index_data = []
+    for i in range(args['min_chrN'], args['max_chrN'] + 1):
+        chr_mat = cl.matrix(balance = False).fetch("chr" + str(i)).astype(float)
+        chr_mat[np.isnan(chr_mat)] = 0
+        #???????????
+        chr_frames, chr_indices = utils.divide2(chr_mat,i)
+        frames_data.extend(chr_frames)
+        index_data.extend(chr_indices)
 
-if __name__ == "__main__":
-    main()
+else:
+    COO_folder_path = args['COO_folder_path']
+    chr_files_list = [f for f in os.listdir(COO_folder_path) if (not f.startswith('.')) & (not f.endswith('_npy_form_tmp.npy'))]
+    chr_num_list = []
+    for f in chr_files_list:
+        m = re.search('chr(\d+|x)', f, re.IGNORECASE)
+        chr_num_list.append(int(m.group(1)))
+    frames_data = []
+    index_data = []
+    for (chr_num, chr_file_name) in zip(chr_num_list,chr_files_list):
+        chr_data_path = os.path.join(COO_folder_path, chr_file_name)
+        temp_frames, temp_index = utils.divide(chr_data_path, chr_num, args['resolution'], args['genome_type'])
+        frames_data.extend(temp_frames)
+        index_data.extend(temp_index)
+        print("chr" + str(chr_num) + " is done!")
+
+frames_data = np.stack(frames_data, axis = 0)
+index_data = np.stack(index_data, axis = 0)
+if not os.path.exists(args['output_folder_path']):
+    os.makedirs(args['output_folder_path'])
+np.save(os.path.join(args['output_folder_path'] , args['output_file_name'] + ".npy"), frames_data)
+np.save(os.path.join(args['output_folder_path'] , args['output_file_name'] + "-index.npy"), index_data)
