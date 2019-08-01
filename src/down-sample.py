@@ -22,6 +22,7 @@ args = vars(ap.parse_args())
 
 if args['input_type'] == 0:
     high_res_cool = cooler.Cooler(args['high_res_cool_path'] + '::/resolutions/' + str(args['resolution']))
+    # first it tries to find number of reads of Hi-C experiment (both intra and inter chromosomal) if it was not given
     try:
         if args['total_num_reads'] is not None:
             total_num_reads = args['total_num_reads']
@@ -40,6 +41,7 @@ if args['input_type'] == 0:
     except:
         print("At least one of num_sample_reads or low_res_cool_path or down_sample_ratio is required!")
 
+    # vec_of_prob list is going to contain all non zero interactions from Hi-C matrices as a background distribution to sample from
     vec_of_prob = []
     for chrName in high_res_cool.chromnames:
         vec_of_prob.extend(high_res_cool.matrix(balance = False, as_pixels = True).fetch(chrName).iloc[:,2])
@@ -47,11 +49,13 @@ if args['input_type'] == 0:
     vec_of_prob.append(num_inter_reads)
     vec_of_prob = [p/total_num_reads for p in vec_of_prob]
     print("start sampling!")
+    # this function sample from calculated background distribution num_sample_reads we want
     down_sampled_counts = np.random.multinomial(num_sample_reads, vec_of_prob)
     print("sampling finished!")
     if not os.path.exists(args['output_folder_path']):
         os.makedirs(args['output_folder_path'])
     start_ind = 0
+    # in this loop we are going to assign new values (sampled) of interactions to pixels
     for chrName in high_res_cool.chromnames:
         chr_pixel = high_res_cool.matrix(balance = False, as_pixels = True).fetch(chrName)
         pixel_size = chr_pixel.shape[0]
@@ -82,6 +86,7 @@ else:
         print("Path of folder including high resolution COO files is required when input type = 1!")
     vec_of_prob = []
     chr_files_list = [f for f in os.listdir(COO_folder_path) if not f.startswith('.')]
+    # it loops over all files in a folder to make down_sampled version of them
     for chr_file in chr_files_list:
         print("reading ", chr_file)
         chr_data = pd.read_csv(os.path.join(COO_folder_path, chr_file), delimiter = "\t", header = None)

@@ -6,6 +6,7 @@ import numpy as np
 import argparse
 import cooler
 import matplotlib.pyplot as plt
+import matplotlib.backends.backend_pdf
 import torch
 from torch.autograd import Variable
 from scipy.stats.stats import pearsonr
@@ -28,6 +29,7 @@ ap.add_argument("--network_path", help = "path of ConvNet learned for enhancing 
 ap.add_argument("--result_path", help = "path of folder to save result in")
 args = vars(ap.parse_args())
 
+# loading a model to be used to enhance
 use_gpu = 0
 Net = model.Net(40, 28)
 Net.load_state_dict(torch.load(args['network_path']))
@@ -35,6 +37,7 @@ Net = Net.float()
 if use_gpu:
     Net = Net.cuda()
 
+# first we load low resolution matrix as an enhanced matrix and then reassign some parts included in enhanced frames
 if args['LowRes_matrix_type'] == 0:
     low_cool = cooler.Cooler(args['LowRes_matrix_path'] + '::/resolutions/' + str(args['resolution']))
     low_chr_mat = low_cool.matrix(balance = False).fetch("chr" + str(args['chr_num'])).astype(float)
@@ -53,6 +56,7 @@ else:
     low_chr_mat = np.load(args['LowRes_matrix_path'] + '_npy_form_tmp.npy')
     enhanced_chr_mat = np.load(args['LowRes_matrix_path'] + '_npy_form_tmp.npy')
     # average_chr_mat = np.load(args['LowRes_matrix_path'] + '_npy_form_tmp.npy')
+# applying model on frames
 chr_frames = np.stack(chr_frames, axis = 0)
 chr_indices = np.stack(chr_indices, axis = 0)
 chr_frames = np.expand_dims(chr_frames, axis = 1)
@@ -61,11 +65,12 @@ enhanced_set = Net(Variable(lowres_set))
 enhanced_set = enhanced_set.data.cpu().numpy()
 enhanced_set = np.reshape(enhanced_set, (enhanced_set.shape[0], enhanced_set.shape[2], enhanced_set.shape[3]))
 
+# using enhanced frames and index file to assign enhanced values
 for i in range(chr_indices.shape[0]):
     x_pos = chr_indices[i,1]
     y_pos = chr_indices[i,2]
     enhanced_chr_mat[x_pos+6:x_pos+34,y_pos+6:y_pos+34] = enhanced_set[i,:,:]
-
+ # since we just enhance upper triangle frames, this is for making a matrix symmetric
 iu = np.triu_indices(enhanced_chr_mat.shape[0],1)
 il = (iu[1],iu[0])
 enhanced_chr_mat[il]=enhanced_chr_mat[iu]
@@ -77,6 +82,8 @@ for i1 in range(chr_length):
     for i2 in range(chr_length):
         average_chr_mat[i1,i2] = np.mean(low_chr_mat2[i1:i1+6,i2:i2+6])
 """
+
+# loading high resolution matrix to evaluate result
 if args['HighRes_matrix_type'] == 0:
     high_cool = cooler.Cooler(args['HighRes_matrix_path'] + '::/resolutions/' + str(args['resolution']))
     high_chr_mat = high_cool.matrix(balance = False).fetch("chr" + str(args['chr_num'])).astype(float)
@@ -85,13 +92,14 @@ else:
     _, _ = utils.divide(args['HighRes_matrix_path'], args['chr_num'], args['resolution'], args['genome_type'])
     high_chr_mat = np.load(args['HighRes_matrix_path'] + '_npy_form_tmp.npy')
 
-
+# this function extract minor diagonals of matrix x shows difference of x and y's in a given minor diagonal
 def vec_of_dist(matrix, x):
     return([matrix[i,i+x] for i in range(matrix.shape[1]-x)])
 
 highVSlow_corr_list = []
 highVSenhanced_corr_list = []
 #highVSaverage_corr_list = []
+# loops over 100 minor diagonals to compute correlations of those diagonals among low, enhanced and high resolution matrices
 for dist in range(100):
     low_res_vec = vec_of_dist(low_chr_mat, dist)
     high_res_vec = vec_of_dist(high_chr_mat, dist)
@@ -100,10 +108,23 @@ for dist in range(100):
     highVSlow_corr_list.append(pearsonr(low_res_vec, high_res_vec)[0])
     highVSenhanced_corr_list.append(pearsonr(high_res_vec, enhanced_vec)[0])
     #highVSaverage_corr_list.append(pearsonr(high_res_vec, average_vec)[0])
+lb = 1095
+ub = 1145
+plt.show()
+pdf = matplotlib.backends.backend_pdf.PdfPages(os.path.join(args['result_path'],'result.pdf'))
 fig = plt.figure()
 plt.plot(highVSlow_corr_list, label = "highVSlow")
 plt.plot(highVSenhanced_corr_list, label = "highVSenhanced")
 #plt.plot(highVSaverage_corr_list, label = "highVSaverage")
 plt.legend(loc='upper right', prop={'size': 5})
-plt.show()
-fig.savefig(os.path.join(args['result_path'],'correlation-plot.png'))
+pdf.savefig(fig)
+fig = plt.figure()
+plt.imshow(low_chr_mat[lb:ub,lb:ub])
+pdf.savefig(fig)
+fig = plt.figure()
+plt.imshow(enhanced_chr_mat[lb:ub,lb:ub])
+pdf.savefig(fig)
+fig = plt.figure()
+plt.imshow(high_chr_mat[lb:ub,lb:ub])
+pdf.savefig(fig)
+pdf.close()

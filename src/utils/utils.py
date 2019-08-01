@@ -4,7 +4,7 @@ import os
 
 ### Isn't this square matrix and other one sparse matrix???
 
-def readSquareMatrix(filename, total_length, resolution):
+def readSquareMatrix(filename, total_length, resolution, coo_type):
     infile = open(filename).readlines()
     HiC = np.zeros((total_length,total_length)).astype(np.int16)
     percentage_finish = 0
@@ -13,10 +13,13 @@ def readSquareMatrix(filename, total_length, resolution):
             print ('finish ', percentage_finish, '%')
             percentage_finish += 10
         nums = infile[i].split()
-        x = int(float(nums[0])/resolution)
-        y = int(float(nums[1])/resolution)
+        if coo_type == 1:
+            x = int(float(nums[0])/resolution)
+            y = int(float(nums[1])/resolution)
+        else:
+            x = int(float(nums[0]))
+            y = int(float(nums[1]))
         val = int(float(nums[2]))
-        #print("x: ", x, ", y: ", y, ", val: ", val)
         HiC[x][y] = val
         HiC[y][x] = val
     return HiC
@@ -24,7 +27,7 @@ def readSquareMatrix(filename, total_length, resolution):
 
 ### this function return result and index. result is array with shape (N,40,40) including N 40*40 frames from chrN. index is array with shape (N,4) including
 ### corresponding information for each frame (tag, chr_number, i, j). i and j are indices of cell[0,0] in the frame.
-def divide(HiCfile, chrN, input_resolution, genome_type):
+def divide(HiCfile, chrN, input_resolution, genome_type, coo_type):
     subImage_size = 40
     step = 25
 
@@ -41,7 +44,7 @@ def divide(HiCfile, chrN, input_resolution, genome_type):
         HiCsample = np.load(matrix_name)
     else:
         print ('creating chr' + str(chrN) + " matrix file")
-        HiCsample = readSquareMatrix(HiCfile, total_length, input_resolution)
+        HiCsample = readSquareMatrix(HiCfile, total_length, input_resolution, coo_type)
         np.save(matrix_name, HiCsample)
 
     ### need to think more about that

@@ -32,19 +32,16 @@ ap.add_argument("--network_name", help = "name of network for saving", required 
 args = vars(ap.parse_args())
 
 use_gpu = 0
-# down_sample_ratio = 16 learn with scaling or not????
 epochs = args['epochs']
-#HiC_max_value = 100 # ?????
 batch_size = args['batch_size']
-
+# we should expand dimension of frames because in fact input has one convolutional layer
 low_resolution_samples = np.load(args['LowRes_frames_path']).astype(np.float32)
 low_resolution_samples = np.expand_dims(low_resolution_samples, axis=1)
 high_resolution_samples = np.load(args['HighRes_frames_path']).astype(np.float32)
 high_resolution_samples = np.expand_dims(high_resolution_samples, axis=1)
-#high_resolution_samples = np.minimum(high_resolution_samples, HiC_max_value)
-#low_resolution_samples = np.minimum(low_resolution_samples, HiC_max_value)
 print(low_resolution_samples.shape)
 print(high_resolution_samples.shape)
+# by considering padding size, we should change output frames size
 sample_size = low_resolution_samples.shape[-1]
 half_padding = model.half_padding
 lb = int(half_padding)
@@ -58,6 +55,7 @@ hires_loader = torch.utils.data.DataLoader(torch.from_numpy(high_resolution_samp
 Net = model.Net(40, 28)
 if use_gpu:
     Net = Net.cuda()
+# SGD optimizer with learning rate = 0.00001 has been used
 optimizer = optim.SGD(Net.parameters(), lr = 0.00001)
 _loss = nn.MSELoss()
 Net.train()
@@ -67,7 +65,7 @@ for epoch in range(0, epochs):
     # iterate over two lists and their indices using enumerate together with zip
     # lowres_loader is list of batches
     for i, (v1, v2) in enumerate(zip(lowres_loader, hires_loader)):
-        # probably it is for skipping last incomplete batch
+        # this is for skipping last incomplete batch
         if (i == len(lowres_loader) - 1):
             continue
         _lowRes = Variable(v1)
